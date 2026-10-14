@@ -2,11 +2,14 @@
 /* Módulo Costos (solo administradores): piezas, tarifas, reglas e historial. */
 const ROL_TARIFA = { calificado:'Calificado (corta y arma)', chalan:'Chalán' };
 const PARCIAL = { sin_definir:'Sin definir (se muestran ambos costos)', por_horas:'Se paga por horas', dia_completo:'Se paga el día completo' };
-const TABLAS = { catalogo_precios:'Precio de pieza', catalogo_conceptos:'Pieza', tarifas_mano_obra:'Tarifa', parametros_costeo:'Reglas de costeo' };
+const TABLAS = { catalogo_precios:'Precio de pieza', catalogo_conceptos:'Pieza', tarifas_mano_obra:'Tarifa', parametros_costeo:'Reglas de costeo',
+  personal:'Persona', jornadas_personal:'Jornada', pagos_personal:'Pago al personal' };
 const CAMPOS = { costo_material:'Material', minutos_calificado:'Min calificado', minutos_chalan:'Min chalán', pago_dia:'Pago por día',
   jornada_horas:'Jornada (h)', factor_hora_extra:'Factor hora extra', max_horas_extra_dia:'Máx. horas extra', pago_dia_parcial:'Pago día parcial',
-  activo:'Activo', nombre:'Nombre', codigo:'Código', rol:'Rol', es_referencia:'Referencia', tipo:'Tipo', unidad:'Unidad', medidas:'Medidas', descripcion:'Descripción' };
-const OCULTOS = new Set(['id','empresa_id','creado_en','actualizado_en','motivo_cambio','nota','concepto_id','vigente_desde','cobra_solo_material_sobre_pieza']);
+  activo:'Activo', nombre:'Nombre', codigo:'Código', rol:'Rol', es_referencia:'Referencia', tipo:'Tipo', unidad:'Unidad', medidas:'Medidas', descripcion:'Descripción',
+  monto:'Monto', semana_inicio:'Semana del', fecha_pago:'Fecha de pago', fecha:'Fecha', horas:'Horas', nivel_nombre:'Nivel', referencia:'Referencia',
+  anulada:'Anulada', anulado:'Anulado', telefono:'Teléfono', puesto:'Puesto', pago_semanal:'Sueldo semanal', tarifa_id:'Nivel', personal_id:'Persona' };
+const OCULTOS = new Set(['id','empresa_id','creado_en','actualizado_en','motivo_cambio','nota','concepto_id','vigente_desde','cobra_solo_material_sobre_pieza','registrado_por']);
 S.costos = { cargado:false, vigente:[], tarifas:[], params:null, auditoria:[], sub:'piezas', error:null };
 
 async function cargarCostos(){
@@ -22,6 +25,8 @@ async function cargarCostos(){
     const a = await S.sb.from('auditoria_costos').select('*').order('creado_en', { ascending:false }).limit(100);
     if (a.error) { c.error = errMsg(a.error); return; }
     c.auditoria = a.data || [];
+    const pe = await S.sb.from('personal').select('id,nombre');   // para mostrar nombres en el historial
+    c.personal = pe.error ? [] : (pe.data || []);
   }
   c.cargado = true;
 }
@@ -49,10 +54,6 @@ function dibujarCostos(){
   document.querySelectorAll('.seg button[data-s]').forEach(b => b.onclick = () => { c.sub = b.dataset.s; dibujarCostos(); });
   ({ piezas:vistaPiezas, tarifas:vistaTarifas, reglas:vistaReglas, historial:vistaHistorial })[c.sub]();
 }
-function motivoCampo(id){
-  return `<div class="field"><label for="${id}">Motivo del cambio *</label><input id="${id}" type="text" autocomplete="off" placeholder="Ej. subió el precio de la madera"><div class="hint">Queda registrado en el historial. Mínimo 5 letras.</div></div>`;
-}
-const num = id => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
 async function tras(okMsg){ await cargarCostos(); cerrarHoja(); dibujarCostos(); toast(okMsg); }
 
 /* ── Piezas ── */
@@ -240,16 +241,20 @@ function vistaReglas(){
 }
 
 /* ── Historial (solo administrador supremo) ── */
-function textoValor(v){ if (v === null || v === undefined) return '—'; if (typeof v === 'boolean') return v ? 'sí' : 'no'; return String(v); }
+function textoValor(v, k){
+  if (k === 'tarifa_id' && v) { const t = S.costos.tarifas.find(x => x.id === v); return t ? t.nombre : 'otra tarifa'; }
+  if (k === 'personal_id' && v) { const p = (S.costos.personal || []).find(x => x.id === v); return p ? p.nombre : 'otra persona'; }
+  if (v === null || v === undefined) return '—'; if (typeof v === 'boolean') return v ? 'sí' : 'no'; return String(v); }
 function difusion(a){
   const d = a.despues || {}, b = a.antes || null;
   const llaves = Object.keys(d).filter(k => !OCULTOS.has(k));
-  const partes = b ? llaves.filter(k => JSON.stringify(b[k]) !== JSON.stringify(d[k])).map(k => `${CAMPOS[k] || k}: ${textoValor(b[k])} → ${textoValor(d[k])}`)
-                   : llaves.filter(k => d[k] !== null && d[k] !== '').slice(0, 6).map(k => `${CAMPOS[k] || k}: ${textoValor(d[k])}`);
+  const partes = b ? llaves.filter(k => JSON.stringify(b[k]) !== JSON.stringify(d[k])).map(k => `${CAMPOS[k] || k}: ${textoValor(b[k], k)} → ${textoValor(d[k], k)}`)
+                   : llaves.filter(k => d[k] !== null && d[k] !== '').slice(0, 6).map(k => `${CAMPOS[k] || k}: ${textoValor(d[k], k)}`);
   return partes.join(' · ');
 }
 function nombreRegistro(a){
   const d = a.despues || {};
+  if (a.tabla === 'jornadas_personal' || a.tabla === 'pagos_personal') return textoValor(d.personal_id, 'personal_id');
   const idc = a.tabla === 'catalogo_precios' ? d.concepto_id : (a.tabla === 'catalogo_conceptos' ? d.id : null);
   const p = idc && S.costos.vigente.find(x => x.concepto_id === idc);
   return p ? p.nombre : (d.nombre || '');

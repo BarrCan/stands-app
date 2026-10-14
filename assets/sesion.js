@@ -8,6 +8,7 @@ const esAdmin = () => S.perfil && S.perfil.rol === 'admin';
 const PAGINAS = [
   { k:'clientes', t:'Clientes', icono:'clientes', url:'clientes.html', admin:false },
   { k:'costos',   t:'Costos',   icono:'costos',   url:'costos.html',   admin:true  },
+  { k:'personal', t:'Personal', icono:'personal', url:'personal.html', admin:true  },
   { k:'ajustes',  t:'Ajustes',  icono:'ajustes',  url:'ajustes.html',  admin:false }
 ];
 
@@ -48,13 +49,18 @@ async function iniciarPagina(cfg){
   await cfg.dibujar();
 }
 
+/* Dirección pública del logo de la empresa (null si no tiene). */
+function urlLogo(ruta){ return ruta ? S.sb.storage.from('logos').getPublicUrl(ruta).data.publicUrl : null; }
+
 function pintarShell(modulo){
   const tabs = PAGINAS.filter(p => !p.admin || esAdmin()).map(p =>
     `<a class="tab" href="${p.url}" ${p.k === modulo ? 'aria-current="page"' : ''}>${IC[p.icono]}<span>${p.t}</span></a>`).join('');
   $('#app').innerHTML = `
-    <header class="top">${marca(28)}<div style="min-width:0"><div class="name">${esc(S.empresa?.nombre || 'Stands')}</div></div></header>
+    <header class="top">${S.empresa?.logo_path ? `<span class="logo-chip"><img src="${esc(urlLogo(S.empresa.logo_path))}" alt="Logo de ${esc(S.empresa.nombre || 'la empresa')}"></span>` : marca(28)}<div style="min-width:0"><div class="name">${esc(S.empresa?.nombre || 'Stands')}</div></div></header>
     <main id="vista"></main>
     <nav class="tabs" aria-label="Secciones">${tabs}</nav>`;
+  const img = document.querySelector('.logo-chip img');   // si el logo no carga, se vuelve a la marca
+  if (img) img.addEventListener('error', () => { const chip = img.parentElement; chip.insertAdjacentHTML('afterend', marca(28)); chip.remove(); });
 }
 
 async function cerrarSesion(){ await S.sb.auth.signOut(); S.modo = 'entrar'; location.replace('index.html'); }

@@ -47,3 +47,6 @@ try { aplicarTema(JSON.parse(localStorage.getItem('stands_tema')||'{}')); } catc
 /* Formato de dinero y tiempo (compartido) */
 const MXN = n => (n === null || n === undefined || n === '') ? '—' : Number(n).toLocaleString('es-MX', { style:'currency', currency:'MXN' });
 const fmtMin = m => { if (m === null || m === undefined) return 'sin dato'; m = Number(m); const h = Math.floor(m/60), r = m % 60; return h && r ? `${h} h ${r} min` : h ? `${h} h` : `${r} min`; };
+
+/* Número de un campo de formulario por selector: null si está vacío. */
+const num = id => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };

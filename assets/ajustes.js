@@ -35,6 +35,15 @@ function pintarAjustes(){
       <p class="hint" id="s-aviso"></p>
     </section>
 
+    <section class="block-s" aria-labelledby="s-lg">
+      <h2 id="s-lg">Logo de la empresa</h2>
+      <p>Aparece en el encabezado de la app y, más adelante, en tus presupuestos. PNG, JPG o WEBP; se ajusta solo a un tamaño ligero.</p>
+      <div class="logo-prev" id="lg-prev">${S.empresa?.logo_path ? `<img src="${esc(urlLogo(S.empresa.logo_path))}" alt="Logo actual">` : '<span class="hint">Aún no hay logo</span>'}</div>
+      ${adm ? `<label class="btn block filebtn" id="lg-btn"><span>${S.empresa?.logo_path ? 'Cambiar logo' : 'Subir logo'}</span><input type="file" id="lg-file" accept="image/png,image/jpeg,image/webp" aria-label="Elegir imagen del logo"></label>
+      ${S.empresa?.logo_path ? '<button class="btn plain block" id="lg-quitar" style="margin-top:10px">Quitar logo</button>' : ''}` : ''}
+      <p class="err" id="lg-msg" role="alert"></p>
+    </section>
+
     <section class="block-s" aria-labelledby="s-ca">
       <h2 id="s-ca">Canales de origen</h2>
       <p>Las opciones que aparecen al registrar un cliente. Si desactivas uno, deja de ofrecerse pero se conserva en los clientes que ya lo tienen.</p>
@@ -68,6 +77,8 @@ function pintarAjustes(){
   pintarCanalesAjustes();
   const add = $('#s-canal-add'); if (add) add.onclick = agregarCanalAjustes;
   const eok = $('#s-emp-ok'); if (eok) eok.onclick = guardarEmpresa;
+  const lf = $('#lg-file'); if (lf) lf.addEventListener('change', () => { if (lf.files[0]) subirLogo(lf.files[0]); lf.value = ''; });
+  const lq = $('#lg-quitar'); if (lq) lq.onclick = quitarLogo;
   $('#s-out').onclick = cerrarSesion;
 }
 
@@ -127,6 +138,44 @@ async function guardarEmpresa(){
   const { data, error } = await S.sb.from('empresas').update(datos).eq('id', S.empresa.id).select().single();
   if (error) { err.textContent = errMsg(error); return; }
   S.empresa = data; const n = $('.top .name'); if (n) n.textContent = data.nombre; toast('Datos guardados');
+}
+
+/* ── Logo de la empresa ── */
+const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp'];
+async function prepararLogo(archivo){
+  if (!TIPOS_LOGO.includes(archivo.type)) throw new Error('El logo debe ser una imagen PNG, JPG o WEBP.');
+  if (archivo.size > 10 * 1024 * 1024) throw new Error('La imagen pesa demasiado (máximo 10 MB).');
+  let bmp; try { bmp = await createImageBitmap(archivo); } catch (_) { throw new Error('No se pudo leer la imagen. Prueba con otra.'); }
+  const k = Math.min(1, 640 / Math.max(bmp.width, bmp.height));
+  const lienzo = document.createElement('canvas'); lienzo.width = Math.max(1, Math.round(bmp.width * k)); lienzo.height = Math.max(1, Math.round(bmp.height * k));
+  lienzo.getContext('2d').drawImage(bmp, 0, 0, lienzo.width, lienzo.height);
+  const tipo = archivo.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';   // el PNG conserva la transparencia
+  const blob = await new Promise(r => lienzo.toBlob(r, tipo, 0.9));
+  if (!blob) throw new Error('No se pudo preparar la imagen. Prueba con otra.');
+  if (blob.size > 2 * 1024 * 1024) throw new Error('Aun reducida, la imagen pesa más de 2 MB. Usa una más sencilla.');
+  return { blob, tipo, ext: tipo === 'image/jpeg' ? 'jpg' : 'png' };
+}
+async function subirLogo(archivo){
+  const msg = $('#lg-msg'); msg.textContent = '';
+  const btn = $('#lg-btn'); btn.setAttribute('aria-busy', 'true'); btn.querySelector('span').textContent = 'Subiendo…';
+  try {
+    const { blob, tipo, ext } = await prepararLogo(archivo);
+    const ruta = `${S.empresa.id}/logo-${Date.now()}.${ext}`, viejo = S.empresa.logo_path;
+    const up = await S.sb.storage.from('logos').upload(ruta, blob, { contentType: tipo, cacheControl: '31536000', upsert: false });
+    if (up.error) throw up.error;
+    const { data, error } = await S.sb.from('empresas').update({ logo_path: ruta }).eq('id', S.empresa.id).select().single();
+    if (error) { await S.sb.storage.from('logos').remove([ruta]); throw error; }
+    S.empresa = data;
+    if (viejo) await S.sb.storage.from('logos').remove([viejo]);   // se borra el anterior para no acumular archivos
+    pintarShell('ajustes'); pintarAjustes(); toast('Logo guardado');
+  } catch (e) { msg.textContent = errMsg(e); btn.removeAttribute('aria-busy'); btn.querySelector('span').textContent = S.empresa?.logo_path ? 'Cambiar logo' : 'Subir logo'; }
+}
+async function quitarLogo(){
+  const msg = $('#lg-msg'); msg.textContent = ''; const viejo = S.empresa.logo_path;
+  const { data, error } = await S.sb.from('empresas').update({ logo_path: null }).eq('id', S.empresa.id).select().single();
+  if (error) { msg.textContent = errMsg(error); return; }
+  S.empresa = data; if (viejo) await S.sb.storage.from('logos').remove([viejo]);
+  pintarShell('ajustes'); pintarAjustes(); toast('Logo quitado');
 }
 
 async function dibujarAjustes(){

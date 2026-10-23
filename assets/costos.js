@@ -3,12 +3,12 @@
 const ROL_TARIFA = { calificado:'Calificado (corta y arma)', chalan:'Chalán' };
 const PARCIAL = { sin_definir:'Sin definir (se muestran ambos costos)', por_horas:'Se paga por horas', dia_completo:'Se paga el día completo' };
 const TABLAS = { catalogo_precios:'Precio de pieza', catalogo_conceptos:'Pieza', tarifas_mano_obra:'Tarifa', parametros_costeo:'Reglas de costeo',
-  personal:'Persona', jornadas_personal:'Jornada', pagos_personal:'Pago al personal' };
+  personal:'Persona', jornadas_personal:'Jornada', pagos_personal:'Pago al personal', perfiles:'Usuario', invitaciones:'Invitación' };
 const CAMPOS = { costo_material:'Material', minutos_calificado:'Min calificado', minutos_chalan:'Min chalán', pago_dia:'Pago por día',
   jornada_horas:'Jornada (h)', factor_hora_extra:'Factor hora extra', max_horas_extra_dia:'Máx. horas extra', pago_dia_parcial:'Pago día parcial',
   activo:'Activo', nombre:'Nombre', codigo:'Código', rol:'Rol', es_referencia:'Referencia', tipo:'Tipo', unidad:'Unidad', medidas:'Medidas', descripcion:'Descripción',
   monto:'Monto', semana_inicio:'Semana del', fecha_pago:'Fecha de pago', fecha:'Fecha', horas:'Horas', nivel_nombre:'Nivel', referencia:'Referencia',
-  anulada:'Anulada', anulado:'Anulado', telefono:'Teléfono', puesto:'Puesto', pago_semanal:'Sueldo semanal', tarifa_id:'Nivel', personal_id:'Persona' };
+  anulada:'Anulada', anulado:'Anulado', telefono:'Teléfono', puesto:'Puesto', pago_semanal:'Sueldo semanal', tarifa_id:'Nivel', personal_id:'Persona', correo:'Correo', estado:'Estado' };
 const OCULTOS = new Set(['id','empresa_id','creado_en','actualizado_en','motivo_cambio','nota','concepto_id','vigente_desde','cobra_solo_material_sobre_pieza','registrado_por']);
 S.costos = { cargado:false, vigente:[], tarifas:[], params:null, auditoria:[], sub:'piezas', error:null };
 
@@ -257,7 +257,7 @@ function nombreRegistro(a){
   if (a.tabla === 'jornadas_personal' || a.tabla === 'pagos_personal') return textoValor(d.personal_id, 'personal_id');
   const idc = a.tabla === 'catalogo_precios' ? d.concepto_id : (a.tabla === 'catalogo_conceptos' ? d.id : null);
   const p = idc && S.costos.vigente.find(x => x.concepto_id === idc);
-  return p ? p.nombre : (d.nombre || '');
+  return p ? p.nombre : (d.nombre || d.correo || '');
 }
 function vistaHistorial(){
   const c = S.costos, box = $('#co-cuerpo');

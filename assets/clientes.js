@@ -8,9 +8,11 @@ function pintarClientes(){
     <h1 class="page-title">Clientes</h1>
     <p class="page-sub">Quién te contrata y de dónde llegó.</p>
     <div class="search">${IC.lupa}<input type="search" id="c-q" placeholder="Buscar cliente" value="${esc(S.q)}" aria-label="Buscar clientes"></div>
-    <div id="c-lista"></div>`;
+    <div id="c-lista"></div>
+    ${esAdmin() ? '<button class="btn plain block" id="c-export" style="margin-top:14px">Exportar clientes a Excel</button>' : ''}`;
   $('#c-q').addEventListener('input', e => { S.q = e.target.value; listaClientes(); });
   if (puedeEditar()) fab('Nuevo cliente', () => formCliente(null));
+  const ex = $('#c-export'); if (ex) ex.onclick = exportarClientes;
   listaClientes();
 }
 
@@ -58,7 +60,7 @@ function formCliente(c){
     <div class="field"><label for="f-notas">Notas</label><textarea id="f-notas" ${ro?'disabled':''}>${esc(c?.notas)}</textarea></div>
     <p class="err" id="f-err" role="alert"></p>
     ${ro ? '' : `<button class="btn block" id="f-ok">${edit?'Guardar cambios':'Guardar cliente'}</button>`}
-    ${edit && !ro ? '<button class="btn danger block" id="f-del" style="margin-top:10px">Eliminar cliente</button>' : ''}
+    ${edit && !ro && esAdmin() ? '<button class="btn danger block" id="f-del" style="margin-top:10px">Eliminar cliente</button>' : ''}
   `);
   $('#h-x').onclick = cerrarHoja;
   const selC = $('#f-canal');
@@ -114,6 +116,23 @@ async function borrarCliente(c){
   if (error) { $('#f-err').textContent = errMsg(error); return; }
   S.clientes = S.clientes.filter(x => x.id !== c.id);
   cerrarHoja(); listaClientes(); toast('Cliente eliminado');
+}
+
+/* Exportar a CSV (abre en Excel). Solo administradores. Las celdas que parecen fórmula se neutralizan. */
+function celdaCsv(v){
+  let t = v === null || v === undefined ? '' : String(v);
+  if (/^[=@\t\r]/.test(t) || (/^[+\-]/.test(t) && /[A-Za-z]/.test(t))) t = "'" + t;
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+function exportarClientes(){
+  const enc = ['Fecha de alta', 'Nombre', 'Canal de origen', 'Teléfono', 'Correo', 'Empresa del cliente', 'Cargo', 'Dirección', 'Notas'];
+  const filas = S.clientes.map(c => [fechaMX(c.creado_en), c.nombre, nombreCanal(c.canal_id), c.telefono, c.correo, c.empresa_cliente, c.cargo, c.direccion, c.notas]);
+  const csv = '\uFEFF' + [enc, ...filas].map(f => f.map(celdaCsv).join(',')).join('\r\n');
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: ZONA });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' })); a.download = `clientes-${hoy}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Clientes exportados');
 }
 
 async function dibujarClientes(){

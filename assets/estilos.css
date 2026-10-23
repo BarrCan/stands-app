@@ -144,6 +144,8 @@
   .pl{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border:0;border-bottom:1px solid var(--line);font-size:14.5px;width:100%;background:none;text-align:left}
   .pl.pt{font-weight:700}
   .pl.pago{cursor:pointer;color:var(--accent)}
+  .volver{display:inline-block;margin-bottom:8px;font-size:14px;font-weight:600}
+  .sub{font-size:18px;margin:20px 0 8px}
   .precio{font-weight:600;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
   .seg.sm button{font-size:14px;padding:0 4px}
   .hist{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px}

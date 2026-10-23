@@ -61,6 +61,12 @@ function pintarAjustes(){
       ${adm ? '<button class="btn block" id="s-emp-ok">Guardar datos</button><p class="err" id="s-emp-err" role="alert"></p>' : ''}
     </section>
 
+    ${adm ? `<section class="block-s" aria-labelledby="s-ac">
+      <h2 id="s-ac">Usuarios y accesos</h2>
+      <p>Invita a tu equipo por correo, elige qué puede ver cada quien y desactiva accesos.</p>
+      <a class="btn block" href="usuarios.html">Administrar usuarios</a>
+    </section>` : ''}
+
     <section class="block-s" aria-labelledby="s-cu">
       <h2 id="s-cu">Cuenta</h2>
       <p>${esc(S.user?.email||'')} · rol: ${esc(S.perfil?.es_superadmin ? 'administrador supremo' : (S.perfil?.rol||''))}</p>

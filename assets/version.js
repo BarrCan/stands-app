@@ -1,5 +1,9 @@
 'use strict';
 /* VERSIÓN DEL SITIO: único lugar donde se escribe. Se muestra en Ajustes.
+   v0.6.1 - 2026-10-25
+     - Costos: cada pieza guarda el costo real (el que se espera pagar) y el valor para cotizar (el más alto);
+       la diferencia es el beneficio previsto. Además guarda tiempos de entrega (corta, práctica y para cotizar),
+       fuente del precio y grupo. Nueva unidad: metro lineal. Al editar un precio ya no se pierden estos valores.
    v0.6.0 - 2026-10-16
      - Usuarios y accesos: invitación por correo con rol; la persona crea su cuenta y el sistema la ubica.
        Ya no se crean empresas desde la pantalla de entrada. Recuperar contraseña. Acceso desactivado.
@@ -16,4 +20,4 @@
        nunca mezcle versiones. Verificador automático antes de cada entrega.
    v0.2.0 - Pantalla Costos (piezas, tarifas, reglas) con historial para el supremo.
    v0.1.0 - Acceso, clientes con canales editables, ajustes y colores. */
-const APP_VERSION = 'v0.6.0';
+const APP_VERSION = 'v0.6.1';

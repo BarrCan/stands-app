@@ -7,8 +7,14 @@ const TABLAS = { catalogo_precios:'Precio de pieza', catalogo_conceptos:'Pieza',
 const CAMPOS = { costo_material:'Material', minutos_calificado:'Min calificado', minutos_chalan:'Min chalán', pago_dia:'Pago por día',
   jornada_horas:'Jornada (h)', factor_hora_extra:'Factor hora extra', max_horas_extra_dia:'Máx. horas extra', pago_dia_parcial:'Pago día parcial',
   activo:'Activo', nombre:'Nombre', codigo:'Código', rol:'Rol', es_referencia:'Referencia', tipo:'Tipo', unidad:'Unidad', medidas:'Medidas', descripcion:'Descripción',
+  costo_material_bajo:'Material (bajo)', costo_material_alto:'Material (para cotizar)', dias_entrega_bajo:'Entrega corta (días)', dias_entrega:'Entrega práctica (días)',
+  dias_entrega_alto:'Entrega para cotizar (días)', fuente:'Fuente', grupo:'Grupo',
   monto:'Monto', semana_inicio:'Semana del', fecha_pago:'Fecha de pago', fecha:'Fecha', horas:'Horas', nivel_nombre:'Nivel', referencia:'Referencia',
   anulada:'Anulada', anulado:'Anulado', telefono:'Teléfono', puesto:'Puesto', pago_semanal:'Sueldo semanal', tarifa_id:'Nivel', personal_id:'Persona', correo:'Correo', estado:'Estado' };
+const UNI = { pieza:'pieza', m2:'m²', ml:'metro lineal', dia:'día' };
+const GRUPOS = { acabado_piso:'Acabado de piso', vinil:'Vinil', letreros:'Letreros y cortes', iluminacion:'Iluminación' };
+const uni = u => UNI[u] || u;
+const nombreGrupo = g => GRUPOS[g] || (g.charAt(0).toUpperCase() + g.slice(1).replace(/_/g, ' '));
 const OCULTOS = new Set(['id','empresa_id','creado_en','actualizado_en','motivo_cambio','nota','concepto_id','vigente_desde','cobra_solo_material_sobre_pieza','registrado_por']);
 S.costos = { cargado:false, vigente:[], tarifas:[], params:null, auditoria:[], sub:'piezas', error:null };
 
@@ -65,22 +71,46 @@ function vistaPiezas(){
     <button class="row ${p.activo ? '' : 'off'}" data-id="${esc(p.concepto_id)}">
       <span class="main">
         <div class="nm">${esc(p.nombre)}${p.activo ? '' : ' (inactiva)'}</div>
-        <div class="ln">${esc(p.codigo)} · por ${esc(p.unidad)}</div>
+        <div class="ln">${esc(p.codigo)} · por ${esc(uni(p.unidad))}${p.grupo ? ' · ' + esc(nombreGrupo(p.grupo)) : ''}</div>
         <div class="ln wrap">Material ${MXN(p.costo_material)} · ${p.costo_mano_obra !== null ? 'Mano de obra ' + MXN(p.costo_mano_obra) : 'tiempo o tarifa pendiente'}</div>
+        ${(p.costo_material_alto != null || p.dias_entrega_alto != null) ? `<div class="ln wrap">Para cotizar: ${p.costo_total_cotizar != null ? MXN(p.costo_total_cotizar) : MXN(p.costo_material_alto)}${p.dias_entrega_alto != null ? ' · entrega ' + p.dias_entrega_alto + ' d' : ''}</div>` : ''}
       </span>
       <span class="precio">${p.costo_total !== null ? MXN(p.costo_total) : '<span class="chip">Sin total</span>'}</span>
-    </button>`).join('') + '</div><p class="hint" style="margin-top:10px">El total suma material y mano de obra por horas. El costo por día completo depende de la cuadrilla y se calcula al cotizar.</p>';
+    </button>`).join('') + '</div><p class="hint" style="margin-top:10px">El total suma material y mano de obra por horas, con el costo real. "Para cotizar" usa el valor más alto; la diferencia es tu beneficio previsto. El costo por día completo depende de la cuadrilla y se calcula al cotizar.</p>';
   box.querySelectorAll('.row').forEach(r => r.onclick = () => formPieza(c.vigente.find(x => x.concepto_id === r.dataset.id)));
+}
+
+/* Campos de cotización y entrega, compartidos por "editar" y "nueva pieza" (x = prefijo de los ids). */
+function htmlExtra(x, p){
+  const v = k => (p && p[k] != null) ? p[k] : '';
+  const n = (id, k, et, ay) => `<div class="field"><label for="${x}-${id}">${et}</label><input id="${x}-${id}" type="number" inputmode="${id === 'alto' || id === 'bajo' ? 'decimal' : 'numeric'}" step="${id === 'alto' || id === 'bajo' ? '0.01' : '1'}" min="0" value="${v(k)}">${ay ? `<div class="hint">${ay}</div>` : ''}</div>`;
+  return n('alto', 'costo_material_alto', 'Para cotizar: material más alto (sin IVA)', 'Opcional. Si lo dejas vacío se cotiza con el costo real. Lo que sobra frente al costo real es tu beneficio previsto.')
+    + n('bajo', 'costo_material_bajo', 'Material más bajo (solo referencia)', '')
+    + n('db', 'dias_entrega_bajo', 'Entrega más corta (días naturales)', '')
+    + n('dm', 'dias_entrega', 'Entrega en la práctica (días)', '')
+    + n('da', 'dias_entrega_alto', 'Entrega para cotizar: la más larga (días)', 'Es la que se promete al cotizar.')
+    + `<div class="field"><label for="${x}-fte">Fuente del precio</label><input id="${x}-fte" type="text" placeholder="Tienda, SKU o proveedor" value="${esc(v('fuente'))}"></div>`;
+}
+function leerExtra(x, m){
+  const alto = num('#' + x + '-alto'), bajo = num('#' + x + '-bajo'), db = num('#' + x + '-db'), dm = num('#' + x + '-dm'), da = num('#' + x + '-da');
+  const fte = $('#' + x + '-fte').value.trim() || null;
+  if ([alto, bajo].some(z => z !== null && (Number.isNaN(z) || z < 0))) return { error:'Revisa el material para cotizar y el material bajo.' };
+  if (alto !== null && alto < m) return { error:'El valor para cotizar no puede ser menor que el costo real.' };
+  if (bajo !== null && bajo > m) return { error:'El valor bajo no puede ser mayor que el costo real.' };
+  if ([db, dm, da].some(z => z !== null && (Number.isNaN(z) || z < 0 || !Number.isInteger(z)))) return { error:'Los días de entrega deben ser números enteros.' };
+  if ((db !== null && dm !== null && db > dm) || (dm !== null && da !== null && dm > da) || (db !== null && da !== null && db > da)) return { error:'Los días van de menor a mayor: corta, práctica y para cotizar.' };
+  return { campos:{ costo_material_alto:alto, costo_material_bajo:bajo, dias_entrega_bajo:db, dias_entrega:dm, dias_entrega_alto:da, fuente:fte } };
 }
 
 function formPieza(p){
   const hc = p.costo_hora_calificado, hch = p.costo_hora_chalan;
   abrirHoja(`
     <div class="sheet-head"><h2>${esc(p.nombre)}</h2><button class="x" id="h-x" aria-label="Cerrar">✕</button></div>
-    <p class="hint" style="margin:-6px 0 14px">${esc(p.codigo)} · por ${esc(p.unidad)}${p.vigente_desde ? ' · precio vigente desde ' + esc(p.vigente_desde) : ''}</p>
-    <div class="field"><label for="p-mat">Costo de material (sin IVA)</label><input id="p-mat" type="number" inputmode="decimal" step="0.01" min="0" value="${p.costo_material ?? ''}"></div>
+    <p class="hint" style="margin:-6px 0 14px">${esc(p.codigo)} · por ${esc(uni(p.unidad))}${p.vigente_desde ? ' · precio vigente desde ' + esc(p.vigente_desde) : ''}</p>
+    <div class="field"><label for="p-mat">Costo de material real (sin IVA)</label><input id="p-mat" type="number" inputmode="decimal" step="0.01" min="0" value="${p.costo_material ?? ''}"><div class="hint">Lo que esperas pagar en la práctica.</div></div>
     <div class="field"><label for="p-cal">Minutos de trabajo calificado</label><input id="p-cal" type="number" inputmode="numeric" step="1" min="0" value="${p.minutos_calificado ?? ''}"><div class="hint">Cortar y armar. 60 min = 1 hora.</div></div>
     <div class="field"><label for="p-cha">Minutos de chalán</label><input id="p-cha" type="number" inputmode="numeric" step="1" min="0" value="${p.minutos_chalan ?? ''}"><div class="hint">Lijar, pintar, tareas repetitivas.</div></div>
+    ${htmlExtra('p', p)}
     <div class="prev" id="p-prev" aria-live="polite"></div>
     ${motivoCampo('p-mot')}
     <p class="err" id="p-err" role="alert"></p>
@@ -91,17 +121,21 @@ function formPieza(p){
     const m = num('#p-mat'), a = num('#p-cal'), b = num('#p-cha');
     if (m === null || a === null || b === null || [m,a,b].some(Number.isNaN)) { $('#p-prev').textContent = 'Completa material y minutos para ver el costo.'; return; }
     if (hc == null || hch == null) { $('#p-prev').textContent = 'Define las tarifas de referencia (calificado y chalán) para ver el costo total.'; return; }
-    $('#p-prev').textContent = 'Costo calculado: ' + MXN(m + a/60*hc + b/60*hch) + ' (material ' + MXN(m) + ' + mano de obra ' + MXN(a/60*hc + b/60*hch) + ')';
+    const mo = a/60*hc + b/60*hch, alto = num('#p-alto');
+    let t = 'Costo calculado: ' + MXN(m + mo) + ' (material ' + MXN(m) + ' + mano de obra ' + MXN(mo) + ')';
+    if (alto !== null && !Number.isNaN(alto) && alto >= m) t += '. Para cotizar: ' + MXN(alto + mo) + '. Beneficio previsto por ' + uni(p.unidad) + ': ' + MXN(alto - m) + '.';
+    $('#p-prev').textContent = t;
   };
-  ['#p-mat','#p-cal','#p-cha'].forEach(i => $(i).addEventListener('input', prev)); prev();
+  ['#p-mat','#p-cal','#p-cha','#p-alto'].forEach(i => $(i).addEventListener('input', prev)); prev();
   $('#p-ok').onclick = async () => {
     const err = $('#p-err'); err.textContent = '';
     const m = num('#p-mat'), a = num('#p-cal'), b = num('#p-cha'), mot = $('#p-mot').value.trim();
     if (m === null || Number.isNaN(m) || m < 0) { err.textContent = 'Escribe el costo de material.'; return; }
     if ([a,b].some(x => x !== null && (Number.isNaN(x) || x < 0 || !Number.isInteger(x)))) { err.textContent = 'Los minutos deben ser números enteros.'; return; }
+    const ex = leerExtra('p', m); if (ex.error) { err.textContent = ex.error; return; }
     if (mot.length < 5) { err.textContent = 'Escribe el motivo del cambio (mínimo 5 letras).'; return; }
     $('#p-ok').disabled = true;
-    const { error } = await S.sb.from('catalogo_precios').insert({ concepto_id:p.concepto_id, costo_material:m, minutos_calificado:a, minutos_chalan:b, nota:mot });
+    const { error } = await S.sb.from('catalogo_precios').insert({ concepto_id:p.concepto_id, costo_material:m, minutos_calificado:a, minutos_chalan:b, nota:mot, ...ex.campos });
     if (error) { err.textContent = errMsg(error); $('#p-ok').disabled = false; return; }
     await tras('Costo guardado');
   };
@@ -120,12 +154,14 @@ function formPiezaNueva(){
     <div class="field"><label for="n-cod">Código *</label><input id="n-cod" type="text" autocapitalize="characters" placeholder="Ej. MURO-1X2"></div>
     <div class="field"><label for="n-nom">Nombre *</label><input id="n-nom" type="text"></div>
     <div class="field"><label for="n-tipo">Tipo</label><select id="n-tipo"><option value="fabricado">Fabricado</option><option value="especial">Especial (pieza distinta)</option><option value="renta">Renta</option><option value="servicio">Servicio</option></select></div>
-    <div class="field"><label for="n-uni">Se cobra por</label><select id="n-uni"><option value="pieza">Pieza</option><option value="m2">Metro cuadrado</option><option value="dia">Día</option></select></div>
+    <div class="field"><label for="n-uni">Se cobra por</label><select id="n-uni"><option value="pieza">Pieza</option><option value="m2">Metro cuadrado</option><option value="ml">Metro lineal</option><option value="dia">Día</option></select></div>
+    <div class="field"><label for="n-grp">Grupo</label><input id="n-grp" type="text" list="n-grps" placeholder="Ej. vinil, iluminacion" autocomplete="off"><datalist id="n-grps">${[...new Set(S.costos.vigente.map(x => x.grupo).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('')}</datalist><div class="hint">Opcional. Sirve para agrupar piezas y elegir una entre varias (por ejemplo, el acabado de piso).</div></div>
     <div class="field"><label for="n-med">Medidas</label><input id="n-med" type="text" placeholder="Ej. 1 x 2 m"></div>
     <div class="field"><label for="n-des">Descripción</label><textarea id="n-des"></textarea></div>
-    <div class="field"><label for="n-mat">Costo de material (sin IVA) *</label><input id="n-mat" type="number" inputmode="decimal" step="0.01" min="0"></div>
+    <div class="field"><label for="n-mat">Costo de material real (sin IVA) *</label><input id="n-mat" type="number" inputmode="decimal" step="0.01" min="0"></div>
     <div class="field"><label for="n-cal">Minutos de trabajo calificado</label><input id="n-cal" type="number" inputmode="numeric" step="1" min="0"></div>
     <div class="field"><label for="n-cha">Minutos de chalán</label><input id="n-cha" type="number" inputmode="numeric" step="1" min="0"></div>
+    ${htmlExtra('n', null)}
     ${motivoCampo('n-mot')}
     <p class="err" id="n-err" role="alert"></p>
     <button class="btn block" id="n-ok">Agregar pieza</button>`);
@@ -137,12 +173,14 @@ function formPiezaNueva(){
     if (!codigo || !nombre) { err.textContent = 'Escribe el código y el nombre.'; return; }
     if (m === null || Number.isNaN(m) || m < 0) { err.textContent = 'Escribe el costo de material.'; return; }
     if ([a,b].some(x => x !== null && (Number.isNaN(x) || x < 0 || !Number.isInteger(x)))) { err.textContent = 'Los minutos deben ser números enteros.'; return; }
+    const ex = leerExtra('n', m); if (ex.error) { err.textContent = ex.error; return; }
     if (mot.length < 5) { err.textContent = 'Escribe el motivo (mínimo 5 letras).'; return; }
     $('#n-ok').disabled = true;
     const med = $('#n-med').value.trim() || null, des = $('#n-des').value.trim() || null;
-    const r1 = await S.sb.from('catalogo_conceptos').insert({ codigo, nombre, tipo:$('#n-tipo').value, unidad:$('#n-uni').value, medidas:med, descripcion:des, motivo_cambio:mot }).select().single();
+    const grupo = $('#n-grp').value.trim().toLowerCase().replace(/\s+/g, '_') || null;
+    const r1 = await S.sb.from('catalogo_conceptos').insert({ codigo, nombre, tipo:$('#n-tipo').value, unidad:$('#n-uni').value, medidas:med, descripcion:des, grupo, motivo_cambio:mot }).select().single();
     if (r1.error) { err.textContent = errMsg(r1.error); $('#n-ok').disabled = false; return; }
-    const r2 = await S.sb.from('catalogo_precios').insert({ concepto_id:r1.data.id, costo_material:m, minutos_calificado:a, minutos_chalan:b, nota:mot });
+    const r2 = await S.sb.from('catalogo_precios').insert({ concepto_id:r1.data.id, costo_material:m, minutos_calificado:a, minutos_chalan:b, nota:mot, ...ex.campos });
     if (r2.error) { await cargarCostos(); err.textContent = 'La pieza se creó pero su costo no se guardó: ' + errMsg(r2.error) + ' Ábrela desde la lista para capturarlo.'; $('#n-ok').disabled = false; return; }
     await tras('Pieza agregada');
   };
